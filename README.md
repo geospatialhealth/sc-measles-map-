@@ -3,6 +3,8 @@
 Companion to the paper (add citation and DOI). The map shows results from a synthetic population
 built with the UrbanPop method (ACS 2019-2023), not observed cases or real people.
 
+**[▶ Open the interactive map](https://geospatialhealth.github.io/sc-measles-map-/)**
+
 ## Files
 
 | File | Contents |
