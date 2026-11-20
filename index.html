@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Measles Susceptibility Map</title>
+<meta name="description" content="Interactive map of measles-susceptible children in Greenville and Spartanburg Counties, South Carolina, from a synthetic population (UrbanPop), with local Moran's I and spatial scan clusters.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --bg: #ffffff; --panel: #ffffff; --ink: #1d1d1f; --muted: #5f6368; --line: #e3e3e6;
+    --chip: #f3f3f5; --chip-on: #1d1d1f; --chip-on-ink: #ffffff; --accent: #b2182b;
+    --shadow: 0 6px 24px rgba(0,0,0,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121214; --panel: #1c1c1f; --ink: #ededf0; --muted: #a1a1aa; --line: #2e2e33;
+      --chip: #2a2a2f; --chip-on: #ededf0; --chip-on-ink: #121214; --accent: #ef6a76;
+      --shadow: 0 6px 24px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121214; --panel: #1c1c1f; --ink: #ededf0; --muted: #a1a1aa; --line: #2e2e33;
+    --chip: #2a2a2f; --chip-on: #ededf0; --chip-on-ink: #121214; --accent: #ef6a76;
+    --shadow: 0 6px 24px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #map { position: absolute; inset: 0; background: var(--bg); }
+  .panel { position: absolute; z-index: 1000; top: 12px; left: 12px; width: 340px; max-height: calc(100% - 24px);
+    overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 16px 16px 12px; }
+  h1 { font-size: 17px; line-height: 1.3; margin: 0 0 4px; padding-right: 34px; font-weight: 700; letter-spacing: -.01em; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+  .group { margin: 12px 0 0; }
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 0; background: var(--chip); color: var(--ink); padding: 6px 10px; border-radius: 999px;
+    font: inherit; font-size: 13px; cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-ink); }
+  .chip:disabled { opacity: .35; cursor: default; }
+  select { width: 100%; font: inherit; font-size: 13px; padding: 7px 8px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .ticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+  .toggles label { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0; cursor: pointer; }
+  .legend { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .legend .title { font-size: 12.5px; font-weight: 600; margin-bottom: 6px; }
+  .key { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin: 3px 0; }
+  .sw { width: 16px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); flex: none; }
+  .note { font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+  .note a, .sub a { color: inherit; }
+  .refs { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .refs ol { margin: 0; padding-left: 18px; font-size: 11.5px; color: var(--muted); }
+  .refs li { margin: 0 0 6px; }
+  .refs a { color: inherit; word-break: break-word; }
+  .hidden { display: none !important; }
+  .toggle-panel { display: none; }
+  .leaflet-popup-content { font: 13px/1.4 Inter, system-ui, sans-serif; margin: 12px 14px; min-width: 240px; }
+  .leaflet-popup-content h3 { font-size: 14px; margin: 0 0 2px; }
+  .leaflet-popup-content .muted { color: #666; font-size: 12px; margin-bottom: 6px; }
+  .pt { border-collapse: collapse; width: 100%; font-size: 12px; }
+  .pt th, .pt td { text-align: left; padding: 3px 6px 3px 0; border-bottom: 1px solid #eee; vertical-align: top; }
+  .pt th { font-weight: 600; color: #444; }
+  .themebtn { position: absolute; top: 14px; right: 14px; border: 0; background: var(--chip); color: var(--ink);
+    border-radius: 999px; width: 28px; height: 28px; cursor: pointer; font-size: 14px; }
+  @media (max-width: 640px) {
+    .panel { top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 55%; border-radius: 14px 14px 0 0; padding: 14px 16px; }
+    .panel.collapsed { max-height: 64px; overflow: hidden; }
+    .toggle-panel { display: block; position: absolute; top: 10px; right: 52px; border: 0; background: var(--chip);
+      color: var(--ink); border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+    h1 { font-size: 15px; padding-right: 120px; }
+  }
+</style>
+</head>
+<body>
+<div id="map" role="region" aria-label="Map"></div>
+
+<aside class="panel" id="panel">
+  <button class="themebtn" id="theme" title="Light or dark" aria-label="Switch light or dark">◐</button>
+  <button class="toggle-panel" id="collapse">Hide</button>
+  <h1>Where measles-susceptible children live</h1>
+  <p class="sub">Greenville and Spartanburg Counties, South Carolina. Synthetic population estimates
+    (UrbanPop, ACS <span id="acs"></span>), not observed cases. <a id="paper" href="#">Read the paper</a>.</p>
+
+  <div class="group">
+    <div class="label">View</div>
+    <div class="chips" id="views"></div>
+  </div>
+
+  <div class="group" id="g-layer">
+    <div class="label">Children</div>
+    <select id="layer">
+      <option value="A">A. Students, mapped at their school</option>
+      <option value="B">B. Enrolled students, at home</option>
+      <option value="C" selected>C. All children 1–17, at home</option>
+      <option value="D">D. Children not in school data, at home</option>
+    </select>
+  </div>
+
+  <div class="group" id="g-method">
+    <div class="label">Cluster method</div>
+    <div class="chips" id="methods">
+      <button class="chip" data-m="LISA">Local Moran's I</button>
+      <button class="chip" data-m="scan">Scan statistic</button>
+    </div>
+  </div>
+
+  <div class="group" id="g-window">
+    <div class="label">Scan maximum window: <span id="wlab"></span></div>
+    <input type="range" id="window" min="0" max="4" step="1" value="0" aria-label="Scan maximum window">
+    <div class="ticks" id="wticks"></div>
+  </div>
+
+  <div class="group" id="g-trait">
+    <div class="label">Trait</div>
+    <select id="trait"></select>
+    <div class="chips" id="dtypes" style="margin-top:8px">
+      <button class="chip" data-d="hot">Hot spots of the trait</button>
+      <button class="chip" data-d="bv">With susceptibility nearby</button>
+    </div>
+  </div>
+
+  <div class="group toggles">
+    <div class="label">Show</div>
+    <label><input type="checkbox" id="t-exp" checked> DPH exposure schools</label>
+    <label><input type="checkbox" id="t-sch"> Other schools (not exposure sites)</label>
+    <label><input type="checkbox" id="t-core"> Outline the stable scan core</label>
+  </div>
+
+  <div class="legend" id="legend"></div>
+  <p class="note" id="explain"></p>
+  <div class="refs">
+    <div class="label">Method: UrbanPop synthetic population</div>
+    <ol>
+      <li>Tuccillo JV, Stewart R, Rose A, Trombley N, Moehl J, Nagle N, Bhaduri B. UrbanPop: a spatial microsimulation framework for exploring demographic influences on human dynamics. <i>Applied Geography</i>. 2023;151:102844. <a href="https://doi.org/10.1016/j.apgeog.2022.102844">doi:10.1016/j.apgeog.2022.102844</a></li>
+      <li>Nagle NN, Buttenfield BP, Leyk S, Spielman S. Dasymetric modeling and uncertainty. <i>Annals of the Association of American Geographers</i>. 2014;104(1):80–95. <a href="https://doi.org/10.1080/00045608.2013.843439">doi:10.1080/00045608.2013.843439</a></li>
+      <li>Lovelace R, Ballas D. ‘Truncate, replicate, sample’: a method for creating integer weights for spatial microsimulation. <i>Computers, Environment and Urban Systems</i>. 2013;41:1–11. <a href="https://doi.org/10.1016/j.compenvurbsys.2013.03.004">doi:10.1016/j.compenvurbsys.2013.03.004</a></li>
+      <li>Tuccillo JV, Gaboardi JD. Spatial microsimulation and activity allocation in Python: an update on the Likeness toolkit. <i>Proceedings of the 22nd Python in Science Conference</i>. 2023:93–100. <a href="https://doi.org/10.25080/gerudo-f2bc6f59-00c">doi:10.25080/gerudo-f2bc6f59-00c</a></li>
+      <li>Software: <a href="https://github.com/likeness-pop/livelike">livelike</a> and <a href="https://github.com/likeness-pop/pymedm">pymedm</a> (Likeness toolkit, Python).</li>
+    </ol>
+  </div>
+  <p class="note">Click a block group or school for its numbers. Change the basemap with the layers button (top right); credits at bottom right.
+    Data exported <span id="exported"></span>.</p>
+</aside>
+
+<script src="data/meta.js"></script>
+<script src="data/blockgroups.js"></script>
+<script src="data/schools.js"></script>
+<script src="data/counties.js" onerror="window.COUNTIES=null"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  // ---- Settings ---------------------------------------------------------------------------
+  const PAPER_URL = "#";                        // put the paper's DOI link here
+  const M = window.META || {};
+  const NREAL = M.realizations || 10;
+  const WINS = M.windows || [10, 20, 30, 40, 50];
+  const MAINW = M.main_window || 10;
+  const STABLE_K = Math.ceil((M.stable || 0.8) * NREAL);
+  const RARE_K = Math.max(1, Math.floor(0.35 * NREAL));
+  const TRAITS = M.traits || {};
+  const HAS_CTY = !!(window.COUNTIES && M.counties);
+
+  const QCOL = { HH: "#b2182b", LL: "#2166ac", LH: "#92c5de", HL: "#f4a582" };
+  const QLAB = { HH: "High-High (hot spot)", LL: "Low-Low", HL: "High-Low", LH: "Low-High" };
+  const SCAN = ["#d95f02", "#7570b3", "#e7298a", "#66a61e", "#e6ab02", "#a6761d", "#1b9e77", "#666666", "#8c510a", "#c51b7d"];
+  const FREQ = ["#fcbba1", "#fb6a4a", "#a50f15"];
+  const FREQ_LAB = [`Rarely (1–${RARE_K} of ${NREAL})`, `Sometimes (${RARE_K + 1}–${STABLE_K - 1} of ${NREAL})`,
+                    `Stable (${STABLE_K}–${NREAL} of ${NREAL})`];
+  const RATE_BR = [0.05, 0.10, 0.15, 0.25], RATE_COL = ["#fff5eb", "#fdd0a2", "#fd8d3c", "#d94801", "#7f2704"];
+  const RATE_LAB = ["Under 5%", "5–10%", "10–15%", "15–25%", "25% or more"];
+  const INC_BR = [0, 1, 5, 10], INC_COL = ["#f2f2f2", "#fde0c5", "#fbb582", "#e8603c", "#99000d"];
+  const INC_LAB = ["0", "Under 1", "1–5", "5–10", "10 or more"];
+  const LAYER_LAB = { A: "students at school", B: "enrolled students", C: "all children 1–17", D: "children not in school data" };
+
+  const VIEWS = [
+    ["clusters", "Clusters"], ["stability", "Stability"], ["rate", "Susceptible share"],
+    ["demo", "Demographics"], ["outbreak", "Outbreak"]
+  ];
+  const P = f => f.properties;
+  const TRI = "M8 1.5L15 14H1z", STAR = "M8 .8l2.1 4.6 5 .5-3.8 3.4 1.1 5-4.4-2.6-4.4 2.6 1.1-5L.9 5.9l5-.5z";
+  const fitPad = () => innerWidth > 640 ? { paddingTopLeft: [372, 20], paddingBottomRight: [20, 20] }
+                                        : { paddingTopLeft: [10, 10], paddingBottomRight: [10, Math.round(innerHeight * 0.5)] };
+  const pct = v => v == null ? "–" : (100 * v).toFixed(1) + "%";
+  const of10 = v => v == null ? "–" : `${Math.round(v * NREAL)} of ${NREAL}`;
+  const wk = () => WINS[state.w];
+  const state = { view: "clusters", layer: "C", method: "scan", w: 0, trait: Object.keys(TRAITS)[0], dtype: "bv" };
+
+  // ---- Map ---------------------------------------------------------------------------------
+  const map = L.map("map", { zoomControl: false, preferCanvas: true });
+  L.control.zoom({ position: "topright" }).addTo(map);
+  const dark = () => document.documentElement.dataset.theme === "dark" ||
+    (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+  // Basemaps: OpenStreetMap on load; the layer switcher (top right) also offers Esri Streets and
+  // Esri Imagery. If a basemap fails to load, the next one is tried automatically.
+  const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
+  const ESRI_ATT = 'Tiles &copy; <a href="https://www.esri.com">Esri</a> &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors, and the GIS user community';
+  const OSM_ATT = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+  const mk = (url, att, opt = {}) => L.tileLayer(url, Object.assign({ maxZoom: 18, attribution: att }, opt));
+  const BASE = {
+    "OpenStreetMap": mk("https://tile.openstreetmap.org/{z}/{x}/{y}.png", OSM_ATT, { maxZoom: 19 }),
+    "Esri Streets": mk(ESRI + "World_Street_Map/MapServer/tile/{z}/{y}/{x}", ESRI_ATT),
+    "Esri Imagery": mk(ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}", 'Tiles &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics, and the GIS user community'),
+  };
+  const ORDER = Object.keys(BASE);
+  let tiles = null, failures = 0, switches = 0;
+  function useBase(name) {
+    if (tiles) map.removeLayer(tiles);
+    tiles = BASE[name]; failures = 0;
+    tiles.addTo(map); tiles.bringToBack();
+  }
+  Object.entries(BASE).forEach(([name, layer]) => layer.on("tileerror", () => {
+    if (layer !== tiles || ++failures !== 6 || switches >= ORDER.length - 1) return;   // several failed tiles: try the next basemap, once round
+    const next = ORDER[(ORDER.indexOf(name) + 1) % ORDER.length];
+    console.warn(`Basemap "${name}" did not load; switching to "${next}".`);
+    switches++; useBase(next);
+  }));
+  map.on("baselayerchange", e => { tiles = e.layer; failures = 0; e.layer.bringToBack(); });
+  function setTiles() {                                          // the basemap does not change with light/dark mode
+    if (!tiles) useBase("OpenStreetMap");
+  }
+  setTiles();
+  L.control.layers(BASE, null, { position: "topright", collapsed: true }).addTo(map);
+
+  // Drawing order, bottom to top: block groups and counties, scan-core outline, schools, exposure schools
+  [["polys", 410], ["outline", 420], ["pts", 630], ["expo", 640]].forEach(([n, z]) => { map.createPane(n).style.zIndex = z; });
+  const polyR = L.canvas({ pane: "polys" }), lineR = L.canvas({ pane: "outline" }), ptR = L.canvas({ pane: "pts" });
+  const bgLayer = L.geoJSON(window.BLOCKGROUPS, { style: bgStyle, onEachFeature: bindBG, pane: "polys", renderer: polyR }).addTo(map);
+  map.fitBounds(bgLayer.getBounds(), fitPad());
+  const coreLayer = L.layerGroup();
+  const ctyLayer = HAS_CTY ? L.geoJSON(window.COUNTIES, { style: ctyStyle, onEachFeature: bindCty, pane: "polys", renderer: polyR }) : null;
+  const schLayer = L.geoJSON(window.SCHOOLS, {                   // all schools except exposure sites, one size
+    filter: f => !f.properties.exposure_site, pointToLayer: schoolPoint, onEachFeature: bindSchool });
+  const expLayer = L.geoJSON(window.SCHOOLS, {                   // DPH exposure schools: triangles (first school: star)
+    filter: f => f.properties.exposure_site,
+    pointToLayer: (f, ll) => L.marker(ll, { pane: "expo", icon: expIcon(f.properties), keyboard: false }),
+    onEachFeature: bindSchool
+  });
+
+  // ---- Styling -----------------------------------------------------------------------------
+  function freqColor(v) {
+    const k = Math.round((v || 0) * NREAL);
+    if (k <= 0) return null;
+    return k >= STABLE_K ? FREQ[2] : (k <= RARE_K ? FREQ[0] : FREQ[1]);
+  }
+  function bin(v, br, cols) { let i = 0; while (i < br.length && v >= br[i]) i++; return cols[i]; }
+  function fillFor(p) {
+    const k = state.layer;
+    if (state.view === "clusters") {
+      if (state.method === "LISA") return QCOL[p[`${k}_lisa_sim0`]] || null;
+      const id = p[`${k}_scan_sim0`]; return id > 0 ? SCAN[(id - 1) % SCAN.length] : null;
+    }
+    if (state.view === "stability")
+      return freqColor(state.method === "LISA" ? p[`${k}_LISA_freq`] : p[`${k}_scan${wk()}_freq`]);
+    if (state.view === "rate") { const r = p[`${k}_rate`]; return r == null ? null : bin(r, RATE_BR, RATE_COL); }
+    if (state.view === "demo") return freqColor(p[`${state.trait}_${state.dtype}_freq`]);
+    return null;
+  }
+  function bgStyle(f) {
+    const c = fillFor(P(f));
+    return { color: "#000", weight: c ? 0.6 : 0.35, opacity: c ? 0.85 : 0.45, fillColor: c || "#bdbdbd", fillOpacity: c ? 0.78 : 0.05 };
+  }
+  const plainStyle = () => ({ color: "#000", weight: 0.35, opacity: 0.45, fillColor: "#bdbdbd", fillOpacity: 0.05 });
+  const curStyle = f => (state.view === "clusters" && state.layer === "A") ? plainStyle() : bgStyle(f);
+  function ctyStyle(f) {
+    const p = P(f);
+    return { color: p.study_area ? "#111" : "#777", weight: p.study_area ? 2 : 0.6,
+             fillColor: p.cases ? bin(p.per_100k || 0, INC_BR.slice(1), INC_COL.slice(1)) : INC_COL[0],
+             fillOpacity: 0.8 };
+  }
+  function schoolColor(p) {
+    if (state.view === "clusters" && state.layer === "A") {
+      if (state.method === "LISA") return QCOL[p.quad] || "#ffffff";
+      const id = p[`scan${wk()}`]; return id > 0 ? SCAN[(id - 1) % SCAN.length] : "#ffffff";
+    }
+    return "#ffffff";
+  }
+  function schoolPoint(f, ll) {
+    const p = P(f);
+    return L.circleMarker(ll, { radius: 4, color: "#333", weight: 0.9, fillColor: schoolColor(p), fillOpacity: 0.95,
+                                pane: "pts", renderer: ptR });
+  }
+  function expFill(p) {
+    const c = schoolColor(p);
+    return c !== "#ffffff" ? c : (p.first_school ? "#b2182b" : "#ffd400");
+  }
+  function expIcon(p) {
+    const s = p.first_school ? 20 : 16;
+    return L.divIcon({ className: "", iconSize: [s, s], iconAnchor: [s / 2, s / 2],
+      html: `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><path d="${p.first_school ? STAR : TRI}" fill="${expFill(p)}" stroke="#111" stroke-width="1.3" stroke-linejoin="round"/></svg>` });
+  }
+
+  // ---- Popups --------------------------------------------------------------------------------
+  function bindBG(f, layer) {
+    layer.on("click", e => {
+      const p = P(f);
+      let rows = "";
+      for (const k of ["B", "C", "D"]) {
+        const id = p[`${k}_scan_sim0`];
+        rows += `<tr><th>${k}</th><td>${(p[`${k}_n`] ?? 0).toLocaleString()}</td><td>${(p[`${k}_susceptible`] ?? 0).toLocaleString()} (${pct(p[`${k}_rate`])})</td>
+          <td>${QLAB[p[`${k}_lisa_sim0`]] ? p[`${k}_lisa_sim0`] : "–"} · ${of10(p[`${k}_LISA_freq`])}</td>
+          <td>${id > 0 ? `#${id}${p[`${k}_scan_rr`] ? ` (RR ${p[`${k}_scan_rr`].toFixed(2)})` : ""}` : "–"} · ${of10(p[`${k}_scan${wk()}_freq`])}</td></tr>`;
+      }
+      let demo = "";
+      if (Object.keys(TRAITS).length && p[`${state.trait}_hot_freq`] != null)
+        demo = `<p style="margin:8px 0 0"><b>${TRAITS[state.trait]}</b>: hot spot ${of10(p[`${state.trait}_hot_freq`])}; with susceptibility nearby ${of10(p[`${state.trait}_bv_freq`])}</p>`;
+      L.popup({ maxWidth: 420 }).setLatLng(e.latlng).setContent(
+        `<h3>Block group ${p.geoid}</h3><div class="muted">${p.county} County · ${p.zone || ""}</div>
+         <table class="pt"><tr><th></th><th>Children</th><th>Susceptible</th><th>LISA · stable</th><th>Scan ${MAINW}% · stable at ${wk()}%</th></tr>${rows}</table>
+         <div class="muted" style="margin-top:6px">B enrolled students · C all children 1–17 · D not in school data. Counts from one realization; "stable" counts realizations flagged.</div>${demo}`
+      ).openOn(map);
+    });
+    layer.on("mouseover", () => layer.setStyle({ weight: 2, color: "#111" }));
+    layer.on("mouseout", () => layer.setStyle(curStyle(f)));
+  }
+  function bindSchool(f, layer) {
+    const p = P(f);
+    const cov = p.mmr_coverage == null ? "–" : (p.coverage_censored ? "about " : "") + pct(p.mmr_coverage);
+    layer.bindPopup(`<h3>${p.school_name}</h3><div class="muted">${p.county} County · ${p.sector} · grades ${p.grade_lo === 0 ? "K" : p.grade_lo}–${p.grade_hi}</div>
+      <table class="pt"><tr><th>Reported enrollment</th><td>${p.enrollment ?? "–"}</td></tr>
+      <tr><th>MMR coverage, 2024–25</th><td>${cov}</td></tr>
+      <tr><th>Local Moran's I</th><td>${QLAB[p.quad] || "Not significant"}</td></tr>
+      <tr><th>Scan cluster (window ${wk()}%)</th><td>${p[`scan${wk()}`] > 0 ? "#" + p[`scan${wk()}`] : "None"}</td></tr>
+      ${p.exposure_site ? `<tr><th>DPH exposure site</th><td>${p.first_school ? "First school with cases" : "Yes"}${p.first_announced ? ", " + p.first_announced : ""}</td></tr>` : ""}</table>`);
+  }
+  function bindCty(f, layer) {
+    const p = P(f);
+    layer.bindPopup(`<h3>${p.name} County</h3><table class="pt"><tr><th>Outbreak cases</th><td>${p.cases ?? 0}</td></tr>
+      <tr><th>Per 100,000</th><td>${p.per_100k == null ? "0" : p.per_100k.toFixed(1)}</td></tr></table>`);
+  }
+
+  // ---- Controls ----------------------------------------------------------------------------
+  const $ = id => document.getElementById(id);
+  $("acs").textContent = M.acs || "2019–2023";
+  $("exported").textContent = M.exported || "";
+  $("paper").href = PAPER_URL;
+  $("wticks").innerHTML = WINS.map(w => `<span>${w}%</span>`).join("");
+  $("window").max = WINS.length - 1;
+  const views = $("views");
+  VIEWS.forEach(([v, lab]) => {
+    if (v === "demo" && !Object.keys(TRAITS).length) return;
+    if (v === "outbreak" && !HAS_CTY) return;
+    const b = document.createElement("button");
+    b.className = "chip"; b.dataset.v = v; b.textContent = lab;
+    b.onclick = () => { state.view = v; if (v !== "clusters" && state.layer === "A") state.layer = "C"; update(); };
+    views.appendChild(b);
+  });
+  Object.entries(TRAITS).forEach(([t, lab]) => $("trait").add(new Option(lab, t)));
+  $("layer").onchange = e => { state.layer = e.target.value; update(); };
+  document.querySelectorAll("#methods .chip").forEach(b => b.onclick = () => { state.method = b.dataset.m; update(); });
+  document.querySelectorAll("#dtypes .chip").forEach(b => b.onclick = () => { state.dtype = b.dataset.d; update(); });
+  $("window").oninput = e => { state.w = +e.target.value; update(); };
+  $("trait").onchange = e => { state.trait = e.target.value; update(); };
+  ["t-exp", "t-sch", "t-core"].forEach(id => $(id).onchange = update);
+  $("collapse").onclick = () => { const c = $("panel").classList.toggle("collapsed"); $("collapse").textContent = c ? "Show" : "Hide"; };
+  $("theme").onclick = () => {
+    document.documentElement.dataset.theme = dark() ? "light" : "dark";
+    try { localStorage.setItem("theme", document.documentElement.dataset.theme); } catch (e) {}
+    setTiles();
+  };
+  try { const t = localStorage.getItem("theme"); if (t) { document.documentElement.dataset.theme = t; setTiles(); } } catch (e) {}
+
+  function buildCore() {
+    coreLayer.clearLayers();
+    const k = state.layer === "A" ? "C" : state.layer;
+    L.geoJSON(window.BLOCKGROUPS, { filter: f => P(f)[`${k}_scan_core`], interactive: false,
+      style: { color: "#08519c", weight: 2.4, fill: false }, pane: "outline", renderer: lineR }).addTo(coreLayer);
+  }
+
+  function legend() {
+    const k = state.layer, key = (c, lab, extra = "") => `<div class="key"><span class="sw" style="background:${c};${extra}"></span>${lab}</div>`;
+    let h = "", ex = "";
+    if (state.view === "clusters" && state.method === "LISA") {
+      h = `<div class="title">Local Moran's I, ${LAYER_LAB[k]} (one realization)</div>` +
+        Object.keys(QLAB).map(q => key(QCOL[q], QLAB[q])).join("") + key("#bdbdbd", "Not significant", "opacity:.3");
+      ex = "High-High: a block group with a high susceptible share whose neighbours are also high (p < 0.05, Empirical Bayes rates, 999 permutations).";
+    } else if (state.view === "clusters") {
+      const ids = new Set();
+      if (k === "A") window.SCHOOLS.features.forEach(f => { const v = P(f)[`scan${wk()}`]; if (v > 0) ids.add(v); });
+      else window.BLOCKGROUPS.features.forEach(f => { const v = P(f)[`${k}_scan_sim0`]; if (v > 0) ids.add(v); });
+      h = `<div class="title">Scan clusters by rank, ${LAYER_LAB[k]}, window ${k === "A" ? wk() : MAINW}%</div>` +
+        [...ids].sort((a, b) => a - b).map(i => key(SCAN[(i - 1) % SCAN.length], i === 1 ? "1 (most likely)" : String(i))).join("");
+      ex = "Kulldorff scan statistic, Bernoulli model; clusters at p < 0.05, numbered by likelihood ratio. RR in the pop-up is the cluster's relative risk.";
+    } else if (state.view === "stability" || state.view === "demo") {
+      const what = state.view === "demo"
+        ? (state.dtype === "hot" ? `hot spot of children: ${TRAITS[state.trait]}` : `many susceptible children next to areas where "${TRAITS[state.trait]}" is common`)
+        : (state.method === "LISA" ? `Local Moran's I hot spot, ${LAYER_LAB[k]}` : `in a scan cluster (window ${wk()}%), ${LAYER_LAB[k]}`);
+      h = `<div class="title">How often: ${what}</div>` + FREQ.map((c, i) => key(c, FREQ_LAB[i])).join("") + key("#bdbdbd", "Never", "opacity:.3");
+      ex = `Out of ${NREAL} versions of the synthetic population. Stable areas do not depend on one random draw.`;
+      if (state.view === "demo") ex += " Demographic traits come from the census microdata records behind each synthetic household; see the paper's validation against ACS tract tables.";
+    } else if (state.view === "rate") {
+      h = `<div class="title">Share of ${LAYER_LAB[k]} who are susceptible (one realization)</div>` + RATE_COL.map((c, i) => key(c, RATE_LAB[i])).join("");
+      ex = "Unvaccinated or otherwise not immune to measles, from the synthetic population matched to 2024–25 school MMR coverage.";
+    } else {
+      h = `<div class="title">Outbreak cases per 100,000, by county</div>` + INC_COL.map((c, i) => key(c, INC_LAB[i])).join("");
+      ex = "SC DPH: 997 cases, October 2025–March 2026, by county of residence. Study counties outlined in black.";
+    }
+    if ($("t-sch").checked || (state.view === "clusters" && k === "A"))
+      h += `<div class="key"><svg width="16" height="12" viewBox="0 0 16 12"><circle cx="8" cy="6" r="4" fill="#fff" stroke="#333" stroke-width="1"/></svg>School${state.view === "clusters" && k === "A" ? " (fill = cluster result)" : ""}</div>`;
+    if ($("t-exp").checked) {
+      h += `<div class="key"><svg width="16" height="14" viewBox="0 0 16 16"><path d="${TRI}" fill="#ffd400" stroke="#111" stroke-width="1.3" stroke-linejoin="round"/></svg>DPH exposure school${state.view === "clusters" && k === "A" ? " (fill = cluster result)" : ""}</div>`;
+      h += `<div class="key"><svg width="16" height="14" viewBox="0 0 16 16"><path d="${STAR}" fill="#b2182b" stroke="#111" stroke-width="1.3" stroke-linejoin="round"/></svg>First school with cases</div>`;
+    }
+    if ($("t-core").checked) h += key("transparent", "Stable scan core (all 5 windows)", "border:2px solid #08519c");
+    $("legend").innerHTML = h;
+    $("explain").textContent = ex;
+  }
+
+  function update() {
+    const v = state.view, isA = state.layer === "A";
+    document.querySelectorAll("#views .chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === v));
+    document.querySelectorAll("#methods .chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.m === state.method));
+    document.querySelectorAll("#dtypes .chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.d === state.dtype));
+    $("layer").value = state.layer;
+    $("layer").options[0].disabled = v !== "clusters";
+    $("g-layer").classList.toggle("hidden", v === "demo" || v === "outbreak");
+    $("g-method").classList.toggle("hidden", !(v === "clusters" || v === "stability"));
+    const showW = (v === "stability" && state.method === "scan") || (v === "clusters" && state.method === "scan" && isA);
+    $("g-window").classList.toggle("hidden", !showW);
+    $("wlab").textContent = wk() + "%";
+    $("g-trait").classList.toggle("hidden", v !== "demo");
+
+    if (v === "outbreak") {
+      map.removeLayer(bgLayer); if (ctyLayer && !map.hasLayer(ctyLayer)) { ctyLayer.addTo(map); map.fitBounds(ctyLayer.getBounds(), fitPad()); }
+    } else {
+      if (ctyLayer && map.hasLayer(ctyLayer)) { map.removeLayer(ctyLayer); map.fitBounds(bgLayer.getBounds(), fitPad()); }
+      if (!map.hasLayer(bgLayer)) bgLayer.addTo(map);
+      bgLayer.setStyle(curStyle);
+    }
+    schLayer.eachLayer(l => l.setStyle({ fillColor: schoolColor(l.feature.properties) }));
+    expLayer.eachLayer(l => l.setIcon(expIcon(l.feature.properties)));
+    const showSch = $("t-sch").checked || (isA && v === "clusters");
+    showSch ? schLayer.addTo(map) : map.removeLayer(schLayer);
+    $("t-core").checked && v !== "outbreak" ? (buildCore(), coreLayer.addTo(map)) : map.removeLayer(coreLayer);
+    $("t-exp").checked ? expLayer.addTo(map) : map.removeLayer(expLayer);
+    legend();
+  }
+  update();
+})();
+</script>
+</body>
+</html>
